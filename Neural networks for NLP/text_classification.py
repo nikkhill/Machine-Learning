@@ -3,9 +3,6 @@
 # Download dataset, build vocabulary and preprocess data
 """
 
-# !wget http://phontron.com/data/topicclass-v1.tar.gz
-# !tar -xvf topicclass-v1.tar.gz
-
 import torch
 import numpy as np
 import torch.nn as nn
