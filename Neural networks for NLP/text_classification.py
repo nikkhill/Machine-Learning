@@ -9,8 +9,8 @@ Original file is located at
 # Download dataset, build vocabulary and preprocess data
 """
 
-!wget http://phontron.com/data/topicclass-v1.tar.gz
-!tar -xvf topicclass-v1.tar.gz
+# !wget http://phontron.com/data/topicclass-v1.tar.gz
+# !tar -xvf topicclass-v1.tar.gz
 
 import torch
 import numpy as np
@@ -247,14 +247,13 @@ def output_results(model, test_loader, criterion):
 
 """# Pretrained word embeddings"""
 
-!wget http://nlp.stanford.edu/data/glove.6B.zip
-!unzip glove.6B.zip
+# !wget http://nlp.stanford.edu/data/glove.6B.zip
+# !unzip glove.6B.zip
 
 from emb_weights import EmbWeights
 
 ew = EmbWeights(r"glove.6B.200d.txt")
 emb_mat = ew.create_emb_matrix(voc.w2i)
-# print(emb_mat)
 emb_mat = torch.tensor(emb_mat).float()
 
 """# Create model and train"""
@@ -291,7 +290,6 @@ class CNNClassifier(nn.Module):
         
         self.conv4 = torch.nn.Conv1d(in_channels=FILTER_SIZE_3, out_channels=FILTER_SIZE_4, kernel_size=WIN_SIZE,
                                        stride=2, padding=WIN_SIZE//2, dilation=1, groups=1, bias=True)
-#         self.gru = torch.nn.GRU(input_size=FILTER_SIZE_3, hidden_size=200, num_layers=2, bidirectional=True)
         self.dense_layer = torch.nn.Linear(in_features=FILTER_SIZE_4, out_features=DENSE_SIZE, bias=True)
         self.projection_layer = torch.nn.Linear(in_features=DENSE_SIZE, out_features=ntags, bias=True)
         self.dropout = torch.nn.Dropout(0.2)
@@ -323,12 +321,6 @@ class CNNClassifier(nn.Module):
         h = self.conv4(h)                            # output is (batch, Channels, outseqlen)
         h = h.max(dim=2)[0]                          # batch x num_filters
         h = F.relu(h)
-#         h = h.permute(2, 0, 1)
-#         print(h.size())
-#         _, h = self.gru(h) # gru needs (seq_len, batch, input_size) as input. h is (num_layers * num_directions, batch, hidden_size)
-#         h = h.permute(1, 0, 2).contiguous()
-
-#         h = h.view(h.shape[0],-1)
         h = self.dense_layer(h)
         h = F.relu(h)
         h = self.dropout(h)
@@ -418,10 +410,10 @@ with open(output_file, 'w') as of:
 # !wc valid_predictions.txt
 # !wc topicclass/topicclass_valid.txt
 
-!head test_predictions.txt
-!wc test_predictions.txt
-!wc topicclass/topicclass_test.txt
-!head topicclass/topicclass_test.txt
+# !head test_predictions.txt
+# !wc test_predictions.txt
+# !wc topicclass/topicclass_test.txt
+# !head topicclass/topicclass_test.txt
 
 def read_result(filename):
     out = []
