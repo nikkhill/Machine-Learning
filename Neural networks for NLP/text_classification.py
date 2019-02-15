@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
-"""
+"""text_classification.ipynb
 # Download dataset, build vocabulary and preprocess data
 """
+#
+# !wget http://phontron.com/data/topicclass-v1.tar.gz
+# !tar -xvf topicclass-v1.tar.gz
 
 import torch
 import numpy as np
@@ -26,8 +29,6 @@ class Voc:
         self.char2i = defaultdict(lambda: len(self.char2i))
         self.PADCHAR = self.char2i["<pad>"]
         self.UNKCHAR = self.char2i["<unk>"]
-        #         [self.char2i[c] for c in 'abcdefghijklmnopqrstuvwxyz,.?-!'] # assumes all lowercase
-        #         self.char2i = defaultdict(lambda: self.UNKCHAR, self.char2i)
         self.char_vocab_len = len(self.char2i)
 
     def add_sentence(self, line):
@@ -35,9 +36,10 @@ class Voc:
         line = line.strip()
         words = []
         for w in line.split():
-            words.append(self.w2i[w])
+            lower_w = w.lower()
+            words.append(self.w2i[lower_w])
             [self.char2i[c] for c in w]
-            self.wcounts[w] += 1
+            self.wcounts[lower_w] += 1
         return words
 
     def return_indices(self, line):
@@ -45,8 +47,9 @@ class Voc:
         words = []
         words_char_level = []
         for w in line.split():
-            if w in self.w2i:
-                words.append(self.w2i[w])
+            lower_w = w.lower()
+            if lower_w in self.w2i:
+                words.append(self.w2i[lower_w])
             else:
                 words.append(self.UNK)
             chars = []
@@ -88,7 +91,7 @@ def build_vocab(file):
     # initial processing to be done on training set for building the vocab
     with open(file) as f:
         for line in f:
-            _, line = line.lower().split('|||')
+            _, line = line.split('|||')
             voc.add_sentence(line)
 
 
@@ -100,7 +103,7 @@ def load_data(file):
         for line in f:
             topic, line = line.split('|||')
             topic = topic.strip()
-            words, words_char_level = voc.return_indices(line.lower())
+            words, words_char_level = voc.return_indices(line)
             out.append((topic, words_char_level, words))
             topics.add(topic)
     return out, topics
@@ -109,8 +112,8 @@ def load_data(file):
 build_vocab(train_file)
 print(len(voc))
 
-voc.trim(5)
-len(voc)
+# voc.trim(5)
+# len(voc)
 nwords = len(voc)
 
 train_data, train_topics = load_data(train_file)
@@ -120,8 +123,9 @@ all_topics = train_topics.union(dev_topics)
 topic_to_idx = {topic: idx for (idx, topic) in enumerate(all_topics)}
 idx_to_topic = {idx: topic for (topic, idx) in topic_to_idx.items()}
 ntags = len(topic_to_idx)
-idx_to_topic
 
+
+# idx_to_topic
 
 class SentencesDataset(Dataset):
     def __init__(self, data):
@@ -172,13 +176,13 @@ def train_epoch(model, train_loader, criterion, optimizer):
     model.train()
     model.to(device)
 
-    run_loss = 0.0
-    correct_predictions = 0.0
-    total_predictions = 0.0
+    run_loss = 0
+    correct_predictions = 0
+    total_predictions = 0
 
     start_time = time.time()
-    for batch_idx, sample in enumerate(train_loader):
-        if batch_idx % 300 == 0:
+    for batch_num, sample in enumerate(train_loader):
+        if batch_num % 100 == 0:
             print(".", end='')
         optimizer.zero_grad()
         data_words = sample[0].to(device)
@@ -197,10 +201,10 @@ def train_epoch(model, train_loader, criterion, optimizer):
 
     end_time = time.time()
 
-    acc = (correct_predictions / total_predictions) * 100.0
+    accuracy = correct_predictions * 100 / total_predictions
     run_loss /= len(train_loader)
-    print('Train Loss: ', run_loss, '. Train Accuracy: ', acc, '%', 'Time: ', end_time - start_time, 's')
-    return run_loss, acc
+    print('\nTrain Loss: ', run_loss, '| Train Accuracy: ', accuracy, '%', '| Time: ', end_time - start_time, 's')
+    return run_loss, accuracy
 
 
 def test_model(model, test_loader, criterion):
@@ -209,11 +213,11 @@ def test_model(model, test_loader, criterion):
         model.eval()
         model.to(device)
 
-        run_loss = 0.0
-        correct_predictions = 0.0
-        total_predictions = 0.0
+        run_loss = 0
+        correct_predictions = 0
+        total_predictions = 0
 
-        for _, sample in enumerate(test_loader):
+        for sample in test_loader:
             data_words = sample[0].to(device)
             data_chars = sample[1].to(device)
             target = sample[2].to(device)
@@ -226,19 +230,19 @@ def test_model(model, test_loader, criterion):
             loss = criterion(output, target).detach()
             run_loss += loss.item()
 
-        acc = (correct_predictions / total_predictions) * 100.0
+        accuracy = correct_predictions * 100 / total_predictions
         run_loss /= len(test_loader)
-        print('Test Loss: ', run_loss, '. Test Accuracy: ', acc, '%')
-        return run_loss, acc
+        print('Test Loss: ', run_loss, '| Test Accuracy: ', accuracy, '%')
+        return run_loss, accuracy
 
 
-def output_results(model, test_loader, criterion):
+def output_results(model, test_loader):
     # the output predictions for test
     output = []
     with torch.no_grad():
         model.eval()
         model.to(device)
-        for _, sample in enumerate(test_loader):
+        for sample in test_loader:
             data_words = sample[0].to(device)
             data_chars = sample[1].to(device)
             outputs = model(data_words, data_chars)
@@ -256,20 +260,21 @@ from emb_weights import EmbWeights
 
 ew = EmbWeights(r"glove.6B.200d.txt")
 emb_mat = ew.create_emb_matrix(voc.w2i)
+# print(emb_mat)
 emb_mat = torch.tensor(emb_mat).float()
 
 """# Create model and train"""
 
 torch.backends.cudnn.deterministic = True
-torch.manual_seed(5)
+torch.manual_seed(3)
+cuda = torch.cuda.is_available()
+device = torch.device("cuda" if cuda else "cpu")
 
 EMB_SIZE = 200
 CHAR_EMB_SIZE = 20
 CHAR_CNN_FILTER_SIZE = 32
 RNN_EMB_SIZE = 200
 WIN_SIZE = 3
-FILTER_SIZE_1 = 64
-FILTER_SIZE_2 = 128
 FILTER_SIZE_3 = 256
 FILTER_SIZE_4 = 256
 DENSE_SIZE = 128
@@ -293,6 +298,7 @@ class CNNClassifier(nn.Module):
 
         self.conv4 = torch.nn.Conv1d(in_channels=FILTER_SIZE_3, out_channels=FILTER_SIZE_4, kernel_size=WIN_SIZE,
                                      stride=2, padding=WIN_SIZE // 2, dilation=1, groups=1, bias=True)
+        #         self.gru = torch.nn.GRU(input_size=FILTER_SIZE_3, hidden_size=200, num_layers=2, bidirectional=True)
         self.dense_layer = torch.nn.Linear(in_features=FILTER_SIZE_4, out_features=DENSE_SIZE, bias=True)
         self.projection_layer = torch.nn.Linear(in_features=DENSE_SIZE, out_features=ntags, bias=True)
         self.dropout = torch.nn.Dropout(0.2)
@@ -300,7 +306,7 @@ class CNNClassifier(nn.Module):
     def forward(self, words, word_chars):
         # char:
         batch_size, max_len, max_wlen = word_chars.shape
-        ce = self.char_emb(word_chars)  # 2, 55, 11, 10
+        ce = self.char_emb(word_chars)  # e.g. 2, 55, 11, 10
         ce = ce.permute(0, 1, 3, 2)
         c = self.cnn_char(ce.view(-1, CHAR_EMB_SIZE, max_wlen))
         c = c.view(batch_size, max_len, CHAR_CNN_FILTER_SIZE, max_wlen)
@@ -327,7 +333,7 @@ class CNNClassifier(nn.Module):
         h = self.dense_layer(h)
         h = F.relu(h)
         h = self.dropout(h)
-        out = self.projection_layer(h)  # size(out) = batch x ntags
+        out = self.projection_layer(h)  # size(out) = batch x ntags   
         return out
 
 
@@ -337,8 +343,6 @@ print("number of trainable parameters:", sum(p.numel() for p in model.parameters
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters())
-cuda = torch.cuda.is_available()
-device = torch.device("cuda" if cuda else "cpu")
 
 train_samples = SentencesDataset(train_data)
 dev_samples = SentencesDataset(dev_data)
@@ -352,40 +356,41 @@ dev_loader = dataloader.DataLoader(dev_samples, **test_dataloader_args)
 # len(dev_loader)
 len(train_samples), len(dev_samples)
 
-Train_loss = []
-Train_acc = []
-Test_loss = []
-Test_acc = []
+train_losses = []
+train_accs = []
+test_losses = []
+test_accs = []
 
-n_epochs = 10
+n_epochs = 5
 for i in range(n_epochs):
     train_loss, train_acc = train_epoch(model, train_loader, criterion, optimizer)
     test_loss, test_acc = test_model(model, dev_loader, criterion)
-    Train_loss.append(train_loss)
-    Test_loss.append(test_loss)
-    Test_acc.append(test_acc)
-    Train_acc.append(train_acc)
-    if len(Test_acc) > 1 and test_acc < max(Test_acc):
+    train_losses.append(train_loss)
+    test_losses.append(test_loss)
+    test_accs.append(test_acc)
+    train_accs.append(train_acc)
+    if len(test_accs) > 1 and test_acc < max(test_accs):
         print("val acc decreased")
     else:
         torch.save(model.state_dict(), "test_saved_model_edit")
-    print('=' * 20)
+    print('-' * 100)
 
 model.load_state_dict(torch.load("test_saved_model_edit"))
 test_model(model, dev_loader, criterion)
 
-torch.save(model1.state_dict(), "test_saved_model_edit1")
-torch.save(model2.state_dict(), "test_saved_model_edit2")
-torch.save(model3.state_dict(), "test_saved_model_edit3")
+# model3 = model
 
-import json
+# torch.save(model1.state_dict(), "test_saved_model_edit1")
+# torch.save(model2.state_dict(), "test_saved_model_edit2")
+# torch.save(model3.state_dict(), "test_saved_model_edit3")
 
-with open("vocw2i", 'w') as vf:
-    json.dump(voc.w2i, vf)
+# import json
+# with open("vocc2i", 'w') as vf:
+#     json.dump(voc.char2i, vf)
 
-test_model(model1, dev_loader, criterion)
-test_model(model2, dev_loader, criterion)
-test_model(model3, dev_loader, criterion)
+# test_model(model1, dev_loader, criterion)
+# test_model(model2, dev_loader, criterion)
+# test_model(model3, dev_loader, criterion)
 
 test_data, test_topics = load_data(test_file)
 test_samples = SentencesDataset(test_data)
@@ -395,30 +400,21 @@ predict_dataloader_args = dict(shuffle=False, batch_size=64, pin_memory=True, co
 test_loader = dataloader.DataLoader(test_samples, **predict_dataloader_args)
 dev_predict_loader = dataloader.DataLoader(dev_samples, **predict_dataloader_args)
 
-model = model3
-
-output = output_results(model, dev_predict_loader, criterion)
-output_file = "valid_predictions_4.txt"
+output = output_results(model, dev_predict_loader)
+output_file = "valid_predictions.txt"
 with open(output_file, 'w') as of:
     for i in range(len(output)):
         of.write("{}\n".format(idx_to_topic[output[i]]))
 
 topic_to_idx['UNK'] = -1
-output = output_results(model, test_loader, criterion)
-output_file = "test_predictions_4.txt"
+output = output_results(model, test_loader)
+output_file = "test_predictions.txt"
 with open(output_file, 'w') as of:
     for i in range(len(output)):
         of.write("{}\n".format(idx_to_topic[output[i]]))
 
+"""# Ensemble using majority vote"""
 
-# !head valid_predictions.txt
-# !wc valid_predictions.txt
-# !wc topicclass/topicclass_valid.txt
-
-# !head test_predictions.txt
-# !wc test_predictions.txt
-# !wc topicclass/topicclass_test.txt
-# !head topicclass/topicclass_test.txt
 
 def read_result(filename):
     out = []
@@ -429,28 +425,61 @@ def read_result(filename):
     return out
 
 
-r1 = read_result("test_predictions_3.txt")
-r2 = read_result("test_predictions_2.txt")
-rbest = read_result("test_predictions.txt")
+# r1 = read_result("test_predictions_3.txt")
+# r2 = read_result("test_predictions_2.txt")
+# rbest = read_result("test_predictions_1.txt")
+# # r1 = read_result("valid_predictions_3.txt")
+# # r2 = read_result("valid_predictions_2.txt")
+# # rbest = read_result("valid_predictions_1.txt")
+#
+# with open("ensemble_results_test.csv", "w") as wf:
+#     for i in range(len(rbest)):
+#         l1, l2, lb = r1[i], r2[i], rbest[i]
+#         if l1 == l2:
+#             l = l1
+#         else:
+#             l = lb
+#         wf.write("{}\n".format(l))
+#
+# with open(dev_file) as df:
+#     with open("ensemble_results_valid.csv") as rf:
+#         correct = 0
+#         total = 0
+#         dfl = df.readlines()
+#         rfl = rf.readlines()
+#         for i in range(len(dfl)):
+#             if rfl[i].strip() == dfl[i].split('|||')[0].strip():
+#                 correct += 1
+#             total += 1
+#
+# print("Ensemble accuracy:", correct/total*100)
 
-with open("ensemble_results_test.csv", "w") as wf:
-    for i in range(len(rbest)):
-        l1, l2, lb = r1[i], r2[i], rbest[i]
-        if l1 == l2:
-            l = l1
-        else:
-            l = lb
-        wf.write("{}\n".format(l))
+"""# Analysis"""
 
-with open(dev_file) as df:
-    with open("ensemble_results_valid.csv") as rf:
-        correct = 0
-        total = 0
-        dfl = df.readlines()
-        rfl = rf.readlines()
-        for i in range(len(dfl)):
-            if rfl[i].strip() == dfl[i].split('|||')[0].strip():
-                correct += 1
-            total += 1
-
-correct, total, correct / total
+# with open("topicclass_valid.txt") as df:
+#     with open("ensemble_results_valid.csv") as rf:
+#         dfl = df.readlines()
+#         rfl = rf.readlines()
+# expected =  [line.split('|||')[0].strip() for line in dfl]
+# lines = [line.split('|||')[1].strip() for line in dfl]
+# result = [t.strip() for t in rfl]
+# correct = 0
+# total = 0
+# sent_lens = []
+# wrong_sent_lens = []
+# for i in range(len(dfl)):
+#     if result[i] != expected[i]:
+#         print(dfl[i])
+#         print(rfl[i])
+#         wrong_sent_lens.append(len(lines[i]))
+#     else:
+#         correct += 1
+#     total += 1
+#     sent_lens.append(len(lines[i]))
+# print("Ensemble accuracy:", correct/total*100)
+#
+# from sklearn.metrics import confusion_matrix
+# topic_list = sorted(list(all_topics))
+# print(topic_list)
+# c = confusion_matrix(expected, result, labels=topic_list)
+# np.savetxt("conf_mat.csv", c, delimiter=",")
